@@ -3,17 +3,15 @@ using System.Collections;
 
 /// <summary>
 /// Bumper bulat ala pinball: memantulkan player berdasarkan sudut tabrakan (reflection),
-/// bukan arah tetap. Semakin cepat player datang, semakin kuat pantulannya (dengan batas minimum
-/// supaya tetap terasa "nendang" walau player datang pelan).
-/// Gunakan Collider2D BUKAN trigger (biarkan Is Trigger = false) supaya deteksi arah tabrakan akurat.
+/// bukan arah tetap. Semakin cepat player datang, semakin kuat pantulannya.
 /// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class PinballBumper : MonoBehaviour
 {
     [Header("Bounce Settings")]
     [SerializeField] private float bounceForce = 18f;
-    [SerializeField] private float minBounceForce = 10f; // supaya pantulan tidak pernah terasa lemas
-    [SerializeField] private float cooldown = 0.1f;       // cegah bounce berkali-kali dalam 1 frame akibat collision jitter
+    [SerializeField] private float minBounceForce = 10f;
+    [SerializeField] private float cooldown = 0.1f;
 
     [Header("Juice / Feedback")]
     [SerializeField] private GameObject bounceParticlePrefab;
@@ -35,22 +33,18 @@ public class PinballBumper : MonoBehaviour
     private void OnCollisionEnter2D(Collision2D collision)
     {
         if (!collision.collider.CompareTag("Player")) return;
-        if (Time.time - lastBounceTime < cooldown) return; // cegah bounce ganda
+        if (Time.time - lastBounceTime < cooldown) return;
 
         Rigidbody2D rb = collision.rigidbody;
         if (rb == null) return;
 
         lastBounceTime = Time.time;
 
-        // Arah pantul = kebalikan dari titik kontak (normal), inilah yang membuat efeknya seperti pinball asli:
-        // datang dari kiri memantul ke kanan-atas, datang dari atas memantul ke bawah, dst.
         Vector2 bounceDirection = collision.GetContact(0).normal;
-
-        // Kekuatan pantulan mengikuti kecepatan datang player, tapi tidak pernah di bawah minimum
         float incomingSpeed = rb.linearVelocity.magnitude;
         float finalForce = Mathf.Max(bounceForce, incomingSpeed * 1.2f, minBounceForce);
 
-        rb.linearVelocity = Vector2.zero; // reset dulu supaya arah pantulan bersih, tidak tercampur momentum lama
+        rb.linearVelocity = Vector2.zero;
         rb.AddForce(bounceDirection * finalForce, ForceMode2D.Impulse);
 
         PlayBounceFeedback();
@@ -67,13 +61,12 @@ public class PinballBumper : MonoBehaviour
             Destroy(vfx, 1f);
         }
 
-        if (CameraShake.Instance != null)
-            CameraShake.Instance.Shake();
+        SoundEffectManager.Instance?.PlayBounce();
+        CameraShake.Instance?.LightShake();
     }
 
     private IEnumerator FlashAndPulseRoutine()
     {
-        // Kedip warna + membesar sebentar, khas bumper pinball yang menyala saat kena
         if (sr != null) sr.color = flashColor;
         transform.localScale = originalScale * 1.25f;
 

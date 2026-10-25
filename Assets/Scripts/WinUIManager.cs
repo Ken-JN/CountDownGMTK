@@ -1,33 +1,35 @@
 using UnityEngine;
 using TMPro;
+using System.Collections;
 
 /// <summary>
-/// Menampilkan panel kemenangan dan menghitung rating bintang berdasarkan
-/// seberapa sedikit clone yang dipakai pemain (efisiensi = skill).
-/// Berlangganan ke event OnLevelWon dan OnOutOfClones dari GameManager.
+/// Menampilkan panel kemenangan dengan animasi pop-in yang memuaskan dan
+/// animasi reveal bintang satu per satu.
 /// </summary>
 public class WinUIManager : MonoBehaviour
 {
     [Header("Panels")]
     [SerializeField] private GameObject winPanel;
-    [SerializeField] private GameObject gameOverPanel; // panel saat kehabisan clone
+    [SerializeField] private GameObject gameOverPanel;
 
     [Header("Win Panel UI")]
-    [SerializeField] private TMP_Text starsText;      // contoh tampilan: "★★★☆☆"
-    [SerializeField] private TMP_Text summaryText;     // contoh: "Selesai dengan 3 clone"
+    [SerializeField] private TMP_Text starsText;
+    [SerializeField] private TMP_Text summaryText;
 
-    [Header("Star Thresholds (jumlah clone maksimal untuk X bintang)")]
-    [SerializeField] private int threeStarMax = 2; // pakai <=2 clone = 3 bintang
-    [SerializeField] private int twoStarMax = 4;    // pakai <=4 clone = 2 bintang
-    // Lebih dari itu = 1 bintang
+    [Header("Star Thresholds")]
+    [SerializeField] private int threeStarMax = 2;
+    [SerializeField] private int twoStarMax = 4;
 
     private void Start()
     {
-        winPanel.SetActive(false);
-        gameOverPanel.SetActive(false);
+        if (winPanel != null) winPanel.SetActive(false);
+        if (gameOverPanel != null) gameOverPanel.SetActive(false);
 
-        GameManager.Instance.OnLevelWon += HandleLevelWon;
-        GameManager.Instance.OnOutOfClones += HandleOutOfClones;
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnLevelWon += HandleLevelWon;
+            GameManager.Instance.OnOutOfClones += HandleOutOfClones;
+        }
     }
 
     private void OnDestroy()
@@ -44,16 +46,65 @@ public class WinUIManager : MonoBehaviour
         int cloneCount = GameManager.Instance.CloneCount;
         int stars = CalculateStars(cloneCount);
 
-        starsText.text = new string('\u2605', stars) + new string('\u2606', 3 - stars); // ★ terisi + ☆ kosong
-        summaryText.text = $"Selesai dengan {cloneCount} clone";
+        if (summaryText != null)
+            summaryText.text = $"Selesai dengan {cloneCount} clone!";
 
-        winPanel.SetActive(true);
-        Time.timeScale = 0f; // opsional: pause game saat panel win muncul
+        if (winPanel != null)
+        {
+            winPanel.SetActive(true);
+            StartCoroutine(AnimateWinPanel(stars));
+        }
+    }
+
+    private IEnumerator AnimateWinPanel(int stars)
+    {
+        Transform panelTransform = winPanel.transform;
+        Vector3 initialScale = panelTransform.localScale;
+        panelTransform.localScale = Vector3.zero;
+
+        // Animasi Pop Bounce (unscaledDeltaTime agar berjalan mulus)
+        float duration = 0.35f;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            float t = elapsed / duration;
+            // Elastic pop formula
+            float scaleMultiplier = Mathf.Sin(t * Mathf.PI * 0.7f) * 1.1f;
+            if (t > 0.8f) scaleMultiplier = Mathf.Lerp(1.1f, 1f, (t - 0.8f) / 0.2f);
+
+            panelTransform.localScale = initialScale * scaleMultiplier;
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        panelTransform.localScale = initialScale;
+
+        // Reveal bintang berurutan
+        if (starsText != null)
+        {
+            starsText.text = "";
+            for (int i = 1; i <= 3; i++)
+            {
+                yield return new WaitForSecondsRealtime(0.18f);
+                string currentStars = "";
+                for (int s = 1; s <= 3; s++)
+                {
+                    if (s <= i && s <= stars)
+                        currentStars += "\u2605 "; // ★
+                    else
+                        currentStars += "\u2606 "; // ☆
+                }
+                starsText.text = currentStars.Trim();
+                CameraShake.Instance?.LightShake();
+                SoundEffectManager.Instance?.PlaySwitch();
+            }
+        }
     }
 
     private void HandleOutOfClones()
     {
-        gameOverPanel.SetActive(true);
+        if (gameOverPanel != null)
+            gameOverPanel.SetActive(true);
     }
 
     private int CalculateStars(int cloneCount)
@@ -63,19 +114,17 @@ public class WinUIManager : MonoBehaviour
         return 1;
     }
 
-    /// <summary>Dipanggil oleh tombol "Restart" di panel.</summary>
     public void OnRestartButton()
     {
         Time.timeScale = 1f;
-        winPanel.SetActive(false);
-        gameOverPanel.SetActive(false);
+        if (winPanel != null) winPanel.SetActive(false);
+        if (gameOverPanel != null) gameOverPanel.SetActive(false);
         GameManager.Instance.ResetLevel();
     }
 
-    /// <summary>Dipanggil oleh tombol "Next Level" — sesuaikan dengan sistem scene management Anda.</summary>
     public void OnNextLevelButton()
     {
         Time.timeScale = 1f;
-        // Contoh sederhana: UnityEngine.SceneManagement.SceneManager.LoadScene("Level2");
+        // Contoh: UnityEngine.SceneManagement.SceneManager.LoadScene("Level2");
     }
 }

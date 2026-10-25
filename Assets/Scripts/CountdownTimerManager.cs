@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using System;
+using static SoundEffectManager;
 
 public class CountdownTimerManager : MonoBehaviour
 {
@@ -10,34 +11,61 @@ public class CountdownTimerManager : MonoBehaviour
 
     [Header("Speed Up Settings")]
     [SerializeField] private KeyCode speedUpKey = KeyCode.Return;
-    [SerializeField] private float speedUpMultiplier = 3f; // waktu berjalan 3x lebih cepat saat Enter ditahan
+    [SerializeField] private float speedUpMultiplier = 3f;
     [SerializeField] private Color normalColor = Color.white;
-    [SerializeField] private Color speedUpColor = Color.cyan;   // warna saat dipercepat
-    [SerializeField] private Color warningColor = Color.red;    // warna saat waktu hampir habis
-    [SerializeField] private float warningThreshold = 3f;       // di bawah 3 detik = warning
+    [SerializeField] private Color speedUpColor = Color.cyan;
+    [SerializeField] private Color warningColor = Color.red;
+    [SerializeField] private float warningThreshold = 3f;
+
+    [Header("Juice & Feedback")]
+    [SerializeField] private float pulseScaleMultiplier = 1.35f;
+    [SerializeField] private float pulseSpeed = 8f;
 
     private float currentTime;
     private bool isRunning;
     private bool isSpeedingUp;
+    private Vector3 originalTextScale = Vector3.one;
+    private Vector3 currentTextScale = Vector3.one;
+    private int lastSecondTicked = -1;
 
     public event Action OnTimerExpired;
-    public event Action<bool> OnSpeedUpChanged; // beri tahu sistem lain (misal VFX kamera) saat speed-up mulai/berhenti
+    public event Action<bool> OnSpeedUpChanged;
+
+    private void Awake()
+    {
+        if (timerText != null)
+        {
+            originalTextScale = timerText.transform.localScale;
+            currentTextScale = originalTextScale;
+        }
+    }
 
     private void Update()
     {
         if (!isRunning) return;
 
-        // Cek apakah tombol Enter sedang ditahan
         bool holdingSpeedUp = Input.GetKey(speedUpKey);
         if (holdingSpeedUp != isSpeedingUp)
         {
             isSpeedingUp = holdingSpeedUp;
-            OnSpeedUpChanged?.Invoke(isSpeedingUp); // trigger efek visual di script lain
+            OnSpeedUpChanged?.Invoke(isSpeedingUp);
         }
 
-        // Kurangi waktu lebih cepat kalau sedang speed-up
         float speedMultiplier = isSpeedingUp ? speedUpMultiplier : 1f;
         currentTime -= Time.deltaTime * speedMultiplier;
+
+        // Cek pulsa detik terakhir (3, 2, 1)
+        if (currentTime <= warningThreshold && currentTime > 0f)
+        {
+            int currentSecond = Mathf.CeilToInt(currentTime);
+            if (currentSecond != lastSecondTicked)
+            {
+                lastSecondTicked = currentSecond;
+                PulseTimerText();
+                SoundEffectManager.Instance?.PlayTimerTick();
+                CameraShake.Instance?.LightShake();
+            }
+        }
 
         if (currentTime <= 0f)
         {
@@ -57,10 +85,16 @@ public class CountdownTimerManager : MonoBehaviour
         currentTime = maxTime;
         isRunning = true;
         isSpeedingUp = false;
+        lastSecondTicked = Mathf.CeilToInt(maxTime) + 1;
         UpdateUI();
     }
 
     public void PauseTimer() => isRunning = false;
+
+    private void PulseTimerText()
+    {
+        currentTextScale = originalTextScale * pulseScaleMultiplier;
+    }
 
     private void UpdateUI()
     {
@@ -68,7 +102,24 @@ public class CountdownTimerManager : MonoBehaviour
 
         timerText.text = currentTime.ToString("F1");
 
-        // Prioritas warna: warning (waktu kritis) > speed-up > normal
+        // Scale Lerp (kembali dari efek pulse membesar)
+        currentTextScale = Vector3.Lerp(currentTextScale, originalTextScale, Time.deltaTime * pulseSpeed);
+
+        // Sedikit getar saat fast-forward (Enter)
+        if (isSpeedingUp)
+        {
+            float jitterX = UnityEngine.Random.Range(-2f, 2f);
+            float jitterY = UnityEngine.Random.Range(-2f, 2f);
+            timerText.rectTransform.anchoredPosition = new Vector2(jitterX, jitterY);
+        }
+        else
+        {
+            timerText.rectTransform.anchoredPosition = Vector2.zero;
+        }
+
+        timerText.transform.localScale = currentTextScale;
+
+        // Prioritas warna
         if (currentTime <= warningThreshold)
             timerText.color = Color.Lerp(timerText.color, warningColor, Time.deltaTime * 10f);
         else if (isSpeedingUp)
@@ -77,3 +128,4 @@ public class CountdownTimerManager : MonoBehaviour
             timerText.color = Color.Lerp(timerText.color, normalColor, Time.deltaTime * 10f);
     }
 }
+ 

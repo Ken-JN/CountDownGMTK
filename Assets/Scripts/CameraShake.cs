@@ -2,25 +2,47 @@ using UnityEngine;
 using System.Collections;
 
 /// <summary>
-/// Efek getar kamera ringan. Panggil CameraShake.Instance.Shake() dari GameManager
-/// setiap kali sebuah player membeku, untuk memberi feedback fisik ke pemain.
-/// Tempelkan script ini di GameObject Main Camera.
+/// Efek getar kamera & hitstop dinamis.
+/// Auto-menemukan atau menempel ke Main Camera secara otomatis (Singleton aman).
+/// Panggil CameraShake.Instance.Shake(), LightShake(), MediumShake(), atau HitStop() dari skrip mana pun.
 /// </summary>
 public class CameraShake : MonoBehaviour
 {
-    public static CameraShake Instance { get; private set; }
+    private static CameraShake _instance;
+    public static CameraShake Instance
+    {
+        get
+        {
+            if (_instance == null)
+            {
+                _instance = FindFirstObjectByType<CameraShake>();
+                if (_instance == null && Camera.main != null)
+                {
+                    _instance = Camera.main.gameObject.AddComponent<CameraShake>();
+                }
+            }
+            return _instance;
+        }
+        private set => _instance = value;
+    }
 
     [Header("Shake Settings")]
-    [SerializeField] private float duration = 0.15f;   // durasi singkat, jangan lama-lama biar tidak mengganggu
-    [SerializeField] private float magnitude = 0.1f;   // seberapa jauh kamera bergeser
+    [SerializeField] private float defaultDuration = 0.15f;
+    [SerializeField] private float defaultMagnitude = 0.1f;
 
     private Vector3 originalPos;
     private Coroutine shakeRoutine;
+    private Coroutine hitStopRoutine;
 
     private void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
-        Instance = this;
+        if (_instance != null && _instance != this)
+        {
+            Destroy(this);
+            return;
+        }
+        _instance = this;
+        originalPos = transform.localPosition;
     }
 
     private void Start()
@@ -28,36 +50,79 @@ public class CameraShake : MonoBehaviour
         originalPos = transform.localPosition;
     }
 
-    /// <summary>Memicu satu kali getaran ringan.</summary>
+    /// <summary>Shake standar dengan durasi dan magnitude bawaan.</summary>
     public void Shake()
     {
-        // Kalau sedang shake, hentikan dulu supaya tidak menumpuk dan posisi kamera tidak "melayang"
+        Shake(defaultDuration, defaultMagnitude);
+    }
+
+    /// <summary>Shake ringan untuk benturan kecil / bumper.</summary>
+    public void LightShake()
+    {
+        Shake(0.1f, 0.06f);
+    }
+
+    /// <summary>Shake sedang untuk player membeku jadi clone.</summary>
+    public void MediumShake()
+    {
+        Shake(0.2f, 0.14f);
+    }
+
+    /// <summary>Shake kuat untuk trigger besar atau time out kritis.</summary>
+    public void HeavyShake()
+    {
+        Shake(0.35f, 0.25f);
+    }
+
+    /// <summary>Memicu getaran kamera dengan durasi dan magnitude kustom.</summary>
+    public void Shake(float duration, float magnitude)
+    {
         if (shakeRoutine != null)
         {
             StopCoroutine(shakeRoutine);
             transform.localPosition = originalPos;
         }
-        shakeRoutine = StartCoroutine(ShakeRoutine());
+        shakeRoutine = StartCoroutine(ShakeRoutine(duration, magnitude));
     }
 
-    private IEnumerator ShakeRoutine()
+    private IEnumerator ShakeRoutine(float duration, float magnitude)
     {
         float elapsed = 0f;
 
         while (elapsed < duration)
         {
-            // Semakin dekat ke akhir durasi, getaran semakin kecil (damping)
             float damper = 1f - (elapsed / duration);
             float offsetX = Random.Range(-1f, 1f) * magnitude * damper;
             float offsetY = Random.Range(-1f, 1f) * magnitude * damper;
 
             transform.localPosition = originalPos + new Vector3(offsetX, offsetY, 0f);
 
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime; // Gunakan unscaledDeltaTime agar shake tetap jalan saat hit-stop
             yield return null;
         }
 
-        transform.localPosition = originalPos; // pastikan kembali persis ke posisi awal
+        transform.localPosition = originalPos;
         shakeRoutine = null;
+    }
+
+    /// <summary>
+    /// Efek micro freeze-frame (hitstop) untuk memberi rasa impak instan saat membeku atau melontar.
+    /// </summary>
+    public void HitStop(float duration = 0.04f)
+    {
+        if (hitStopRoutine != null)
+        {
+            StopCoroutine(hitStopRoutine);
+        }
+        hitStopRoutine = StartCoroutine(HitStopRoutine(duration));
+    }
+
+    private IEnumerator HitStopRoutine(float duration)
+    {
+        float originalTimeScale = Time.timeScale;
+        Time.timeScale = 0f;
+        yield return new WaitForSecondsRealtime(duration);
+        Time.timeScale = originalTimeScale;
+        hitStopRoutine = null;
     }
 }

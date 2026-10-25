@@ -10,13 +10,13 @@ using System.Collections;
 public class BouncePad : MonoBehaviour
 {
     [Header("Bounce Settings")]
-    [SerializeField] private Vector2 bounceDirection = Vector2.up; // arah lontar, akan dinormalisasi otomatis
+    [SerializeField] private Vector2 bounceDirection = Vector2.up;
     [SerializeField] private float bounceForce = 15f;
-    [SerializeField] private bool overrideExistingVelocity = true; // true = reset kecepatan lama dulu sebelum lontar
+    [SerializeField] private bool overrideExistingVelocity = true;
 
     [Header("Juice / Feedback")]
-    [SerializeField] private GameObject bounceParticlePrefab; // opsional, efek partikel saat terpantul
-    [SerializeField] private float squashScale = 0.7f;        // seberapa gepeng pad saat kena tumbukan
+    [SerializeField] private GameObject bounceParticlePrefab;
+    [SerializeField] private float squashScale = 0.7f;
     [SerializeField] private float squashDuration = 0.15f;
 
     private Vector3 originalScale;
@@ -29,8 +29,6 @@ public class BouncePad : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        // Hanya pantulkan player yang masih hidup, bukan clone yang sudah beku
-        // (clone bersifat Kinematic sehingga tidak akan terpengaruh gaya fisika sama sekali)
         if (!other.CompareTag("Player")) return;
 
         Rigidbody2D rb = other.GetComponent<Rigidbody2D>();
@@ -46,7 +44,6 @@ public class BouncePad : MonoBehaviour
 
     private void PlayBounceFeedback()
     {
-        // Efek visual "squash" ringan supaya pad terasa hidup, mirip pegas pinball
         StopAllCoroutines();
         StartCoroutine(SquashRoutine());
 
@@ -56,9 +53,9 @@ public class BouncePad : MonoBehaviour
             Destroy(vfx, 1f);
         }
 
-        // Screen shake super ringan opsional, konsisten dengan efek freeze sebelumnya
-        if (CameraShake.Instance != null)
-            CameraShake.Instance.Shake();
+        // Sound & Screen shake
+        SoundEffectManager.Instance?.PlayBounce();
+        CameraShake.Instance?.LightShake();
     }
 
     private IEnumerator SquashRoutine()
